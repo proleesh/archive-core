@@ -1,0 +1,13 @@
+[package]
+name = "archive-core"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "archive_core"
+crate-type=["rlib", "staticlib"]
+
+[dependencies]
+serde = {version ="1", features = ["derive"]}
+thiserror = "2"
+zip = "8.6.0"
