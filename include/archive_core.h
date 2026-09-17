@@ -3,22 +3,23 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-char *archive_detect_format(const char *path);
+    char *archive_detect_format(const char *path);
 
-void archive_string_free(char *value);
+    void archive_string_free(char *value);
 
-int32_t archive_extract(
+    int32_t archive_extract(
 
-    const char *source,
+        const char *source,
 
-    const char *destination
+        const char *destination
 
-);
+    );
 
-char *archive_list(const char *path);
+    char *archive_list(const char *path);
 
 #ifdef __cplusplus
 }
