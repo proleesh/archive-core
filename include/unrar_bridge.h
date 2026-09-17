@@ -24,6 +24,17 @@ extern "C"
         const char *source,
         const char *destination);
 
+    int32_t arkive_rar_extract_with_password(
+        const char *source,
+        const char *destination,
+        const char *password);
+
+    int32_t arkive_rar_list_with_password(
+        const char *path,
+        const char *password,
+        arkive_rar_entry_callback callback,
+        void *context);
+
 #ifdef __cplusplus
 }
 #endif

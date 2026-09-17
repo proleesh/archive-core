@@ -58,6 +58,115 @@ static std::string wide_to_utf8(const wchar_t *value)
     return result;
 }
 
+extern "C" int32_t arkive_rar_list_with_password(
+    const char *path,
+    const char *password,
+    arkive_rar_entry_callback callback,
+    void *context)
+{
+    if (
+        path == nullptr ||
+        password == nullptr ||
+        callback == nullptr)
+    {
+        return ERAR_BAD_DATA;
+    }
+
+    RAROpenArchiveDataEx open_data{};
+
+    open_data.ArcName =
+        const_cast<char *>(path);
+
+    open_data.OpenMode = RAR_OM_LIST;
+
+    HANDLE archive =
+        RAROpenArchiveEx(&open_data);
+
+    if (archive == nullptr)
+    {
+        return static_cast<int32_t>(
+            open_data.OpenResult);
+    }
+
+    RARSetPassword(
+        archive,
+        const_cast<char *>(password));
+
+    int32_t result = ERAR_SUCCESS;
+
+    for (;;)
+    {
+        RARHeaderDataEx header{};
+
+        int code =
+            RARReadHeaderEx(
+                archive,
+                &header);
+
+        if (code == ERAR_END_ARCHIVE)
+        {
+            result = ERAR_SUCCESS;
+            break;
+        }
+
+        if (code != ERAR_SUCCESS)
+        {
+            result = code;
+            break;
+        }
+
+        std::string name;
+
+        if (header.FileNameW[0] != L'\0')
+        {
+            name = wide_to_utf8(
+                header.FileNameW);
+        }
+        else
+        {
+            name = header.FileName;
+        }
+
+        uint64_t size =
+            (static_cast<uint64_t>(
+                 header.UnpSizeHigh)
+             << 32) |
+            header.UnpSize;
+
+        uint64_t compressed_size =
+            (static_cast<uint64_t>(
+                 header.PackSizeHigh)
+             << 32) |
+            header.PackSize;
+
+        const int is_directory =
+            (header.Flags & RHDF_DIRECTORY) != 0;
+
+        callback(
+            name.c_str(),
+            size,
+            compressed_size,
+            is_directory,
+            context);
+
+        code = RARProcessFile(
+            archive,
+            RAR_SKIP,
+            nullptr,
+            nullptr);
+
+        if (code != ERAR_SUCCESS)
+        {
+            result = code;
+            break;
+        }
+    }
+
+    RARCloseArchive(archive);
+
+    return result;
+}
+
 extern "C" int32_t arkive_rar_list(
     const char *path,
     arkive_rar_entry_callback callback,
@@ -395,6 +504,105 @@ extern "C" int32_t arkive_rar_extract(
 
             result = code;
 
+            break;
+        }
+    }
+
+    RARCloseArchive(archive);
+
+    return result;
+}
+extern "C" int32_t arkive_rar_extract_with_password(
+    const char *source,
+    const char *destination,
+    const char *password)
+{
+    if (
+        source == nullptr ||
+        destination == nullptr ||
+        password == nullptr)
+    {
+        return ERAR_BAD_DATA;
+    }
+
+    RAROpenArchiveDataEx open_data{};
+
+    open_data.ArcName =
+        const_cast<char *>(source);
+
+    open_data.OpenMode = RAR_OM_EXTRACT;
+
+    HANDLE archive =
+        RAROpenArchiveEx(&open_data);
+
+    if (archive == nullptr)
+    {
+        return static_cast<int32_t>(
+            open_data.OpenResult);
+    }
+
+    RARSetPassword(
+        archive,
+        const_cast<char *>(password));
+
+    int32_t result = ERAR_SUCCESS;
+
+    for (;;)
+    {
+        RARHeaderDataEx header{};
+
+        int code =
+            RARReadHeaderEx(
+                archive,
+                &header);
+
+        if (code == ERAR_END_ARCHIVE)
+        {
+            result = ERAR_SUCCESS;
+            break;
+        }
+
+        if (code != ERAR_SUCCESS)
+        {
+            result = code;
+            break;
+        }
+
+        std::string name;
+
+        if (header.FileNameW[0] != L'\0')
+        {
+            name = wide_to_utf8(
+                header.FileNameW);
+        }
+        else
+        {
+            name = header.FileName;
+        }
+
+        // 기존 path traversal 방어
+        if (!is_safe_archive_path(name))
+        {
+            result = 1001;
+            break;
+        }
+
+        // symlink / hardlink / redirection 차단
+        if (header.RedirType != 0)
+        {
+            result = 1002;
+            break;
+        }
+
+        code = RARProcessFile(
+            archive,
+            RAR_EXTRACT,
+            const_cast<char *>(destination),
+            nullptr);
+
+        if (code != ERAR_SUCCESS)
+        {
+            result = code;
             break;
         }
     }

@@ -18,4 +18,10 @@ pub enum ArchiveError {
 
     #[error("archive contains an unsafe redirection entry")]
     UnsafeRedirection,
+
+    #[error("archive requires a password")]
+    PasswordRequired,
+
+    #[error("archive password is incorrect")]
+    BadPassword,
 }
