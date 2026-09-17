@@ -33,6 +33,10 @@ extern "C"
         const char *password,
         char **json_out);
 
+    int32_t archive_create_zip(
+        const char *sources_json,
+        const char *destination);
+
     char *archive_list(const char *path);
 
     char *archive_list_with_password(

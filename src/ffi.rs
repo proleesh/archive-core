@@ -2,7 +2,7 @@ use crate::list_archive;
 use std::{
     ffi::{CStr, CString},
     os::raw::c_char,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use crate::extract_archive;
@@ -103,7 +103,7 @@ pub extern "C" fn archive_extract(source: *const c_char, destination: *const c_c
     match extract_archive(Path::new(source), Path::new(destination)) {
         Ok(_) => 0,
 
-        Err(error) => archive_error_code(error)
+        Err(error) => archive_error_code(error),
     }
 }
 #[unsafe(no_mangle)]
@@ -278,4 +278,39 @@ pub unsafe extern "C" fn archive_list_with_password_v2(
     }
 
     0
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn archive_create_zip(
+    sources_json: *const c_char,
+    destination: *const c_char,
+) -> i32 {
+    if sources_json.is_null() || destination.is_null() {
+        return 1;
+    }
+
+    let sources_json = unsafe {
+        match CStr::from_ptr(sources_json).to_str() {
+            Ok(value) => value,
+            Err(_) => return 2,
+        }
+    };
+
+    let destination = unsafe {
+        match CStr::from_ptr(destination).to_str() {
+            Ok(value) => value,
+            Err(_) => return 2,
+        }
+    };
+
+    let sources: Vec<String> = match serde_json::from_str(sources_json) {
+        Ok(value) => value,
+        Err(_) => return 3,
+    };
+
+    let sources: Vec<PathBuf> = sources.into_iter().map(PathBuf::from).collect();
+
+    match crate::backend::zip::create_zip(&sources, Path::new(destination)) {
+        Ok(()) => 0,
+        Err(error) => archive_error_code(error),
+    }
 }
