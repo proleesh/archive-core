@@ -114,6 +114,8 @@ impl ArchiveBackend for RarBackend {
 
         match result {
             0 => Ok(()),
+            22 => Err(ArchiveError::PasswordRequired),
+            24 => Err(ArchiveError::BadPassword),
             1001 => Err(ArchiveError::UnsafePath),
             1002 => Err(ArchiveError::UnsafeRedirection),
             _ => Err(ArchiveError::InvalidArchive),

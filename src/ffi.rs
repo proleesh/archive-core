@@ -103,7 +103,7 @@ pub extern "C" fn archive_extract(source: *const c_char, destination: *const c_c
     match extract_archive(Path::new(source), Path::new(destination)) {
         Ok(_) => 0,
 
-        Err(_) => 3,
+        Err(error) => archive_error_code(error)
     }
 }
 #[unsafe(no_mangle)]
