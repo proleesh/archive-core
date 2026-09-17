@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <filesystem>
 
 static std::string wide_to_utf8(const wchar_t *value)
 {
@@ -148,6 +149,252 @@ extern "C" int32_t arkive_rar_list(
         if (code != ERAR_SUCCESS)
         {
             result = code;
+            break;
+        }
+    }
+
+    RARCloseArchive(archive);
+
+    return result;
+}
+static bool is_safe_archive_path(
+    const std::string &name)
+{
+    if (name.empty())
+    {
+        return false;
+    }
+    std::filesystem::path path(name);
+
+    // /etc/passwd 같은 절대 경로 차단
+    if (path.is_absolute())
+    {
+        return false;
+    }
+    // Windows 계열 경로도 방어
+    if (name.size() >= 2 &&
+        ((name[0] >= 'A' && name[0] <= 'Z') ||
+         (name[0] >= 'a' && name[0] <= 'z')) &&
+        name[1] == ':')
+    {
+        return false;
+    }
+
+    for (const auto &component : path)
+    {
+        if (component == "..")
+        {
+            return false;
+        }
+    }
+    return true;
+}
+extern "C" int32_t arkive_rar_extract(
+    const char *source,
+    const char *destination)
+{
+    if (source == nullptr || destination == nullptr)
+    {
+        return ERAR_BAD_DATA;
+    }
+    //
+
+    // Phase 1
+
+    // 모든 entry의 경로를 먼저 검사한다.
+
+    //
+
+    {
+
+        RAROpenArchiveDataEx open_data{};
+
+        open_data.ArcName =
+
+            const_cast<char *>(source);
+
+        open_data.OpenMode = RAR_OM_LIST;
+
+        HANDLE archive =
+
+            RAROpenArchiveEx(&open_data);
+
+        if (archive == nullptr)
+        {
+
+            return static_cast<int32_t>(
+
+                open_data.OpenResult
+
+            );
+        }
+
+        for (;;)
+        {
+
+            RARHeaderDataEx header{};
+
+            int code =
+
+                RARReadHeaderEx(
+
+                    archive,
+
+                    &header
+
+                );
+
+            if (code == ERAR_END_ARCHIVE)
+            {
+
+                break;
+            }
+
+            if (code != ERAR_SUCCESS)
+            {
+
+                RARCloseArchive(archive);
+
+                return code;
+            }
+
+            std::string name;
+
+            if (header.FileNameW[0] != L'\0')
+            {
+
+                name = wide_to_utf8(
+
+                    header.FileNameW
+
+                );
+            }
+            else
+            {
+
+                name = header.FileName;
+            }
+
+            if (!is_safe_archive_path(name))
+            {
+
+                RARCloseArchive(archive);
+
+                // Arkive 자체 bridge error
+
+                return 1001;
+            }
+
+            // Symlink, hardlink, junction 등의 redirection entry 차단.
+            // 첫 버전 Arkive에서는 실제 파일/디렉터리만 추출한다.
+            if (header.RedirType != 0)
+            {
+                RARCloseArchive(archive);
+                return 1002;
+            }
+
+            code = RARProcessFile(
+
+                archive,
+
+                RAR_SKIP,
+
+                nullptr,
+
+                nullptr
+
+            );
+
+            if (code != ERAR_SUCCESS)
+            {
+
+                RARCloseArchive(archive);
+
+                return code;
+            }
+        }
+
+        RARCloseArchive(archive);
+    }
+
+    //
+
+    // Phase 2
+
+    // 검사에 통과했으므로 실제 extraction
+
+    //
+
+    RAROpenArchiveDataEx open_data{};
+
+    open_data.ArcName =
+
+        const_cast<char *>(source);
+
+    open_data.OpenMode = RAR_OM_EXTRACT;
+
+    HANDLE archive =
+
+        RAROpenArchiveEx(&open_data);
+
+    if (archive == nullptr)
+    {
+
+        return static_cast<int32_t>(
+
+            open_data.OpenResult
+
+        );
+    }
+
+    int32_t result = ERAR_SUCCESS;
+
+    for (;;)
+    {
+
+        RARHeaderDataEx header{};
+
+        int code =
+
+            RARReadHeaderEx(
+
+                archive,
+
+                &header
+
+            );
+
+        if (code == ERAR_END_ARCHIVE)
+        {
+
+            break;
+        }
+
+        if (code != ERAR_SUCCESS)
+        {
+
+            result = code;
+
+            break;
+        }
+
+        code = RARProcessFile(
+
+            archive,
+
+            RAR_EXTRACT,
+
+            const_cast<char *>(destination),
+
+            nullptr
+
+        );
+
+        if (code != ERAR_SUCCESS)
+        {
+
+            result = code;
+
             break;
         }
     }

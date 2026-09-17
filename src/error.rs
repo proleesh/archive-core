@@ -12,4 +12,10 @@ pub enum ArchiveError {
 
     #[error("invalid archive")]
     InvalidArchive,
+
+    #[error("archive contains an unsafe path")]
+    UnsafePath,
+
+    #[error("archive contains an unsafe redirection entry")]
+    UnsafeRedirection,
 }

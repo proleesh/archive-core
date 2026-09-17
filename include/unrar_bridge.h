@@ -20,6 +20,10 @@ extern "C"
         arkive_rar_entry_callback callback,
         void *context);
 
+    int32_t arkive_rar_extract(
+        const char *source,
+        const char *destination);
+
 #ifdef __cplusplus
 }
 #endif
