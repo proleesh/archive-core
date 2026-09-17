@@ -2,10 +2,11 @@ use std::{
     ffi::CStr,
     os::raw::{c_char, c_int, c_void},
     path::Path,
+    sync::Mutex,
 };
 
 use crate::{backend::ArchiveBackend, error::ArchiveError, model::ArchiveEntry};
-
+static UNRAR_LOCK: Mutex<()> = Mutex::new(());
 unsafe extern "C" {
     fn arkive_rar_list(
         path: *const c_char,
@@ -74,6 +75,9 @@ unsafe extern "C" fn collect_entry(
 
 impl ArchiveBackend for RarBackend {
     fn list(&self, path: &Path) -> Result<Vec<ArchiveEntry>, ArchiveError> {
+        let _gurad = UNRAR_LOCK
+            .lock()
+            .map_err(|_| ArchiveError::InvalidArchive)?;
         let path = path.to_str().ok_or(ArchiveError::InvalidArchive)?;
 
         let path = std::ffi::CString::new(path).map_err(|_| ArchiveError::InvalidArchive)?;
@@ -97,6 +101,9 @@ impl ArchiveBackend for RarBackend {
     }
 
     fn extract(&self, source: &Path, destination: &Path) -> Result<(), ArchiveError> {
+        let _guard = UNRAR_LOCK
+            .lock()
+            .map_err(|_| ArchiveError::InvalidArchive)?;
         let source = source.to_str().ok_or(ArchiveError::InvalidArchive)?;
 
         let destination = destination.to_str().ok_or(ArchiveError::InvalidArchive)?;
@@ -120,6 +127,9 @@ impl RarBackend {
         destination: &Path,
         password: &str,
     ) -> Result<(), ArchiveError> {
+        let _gurad = UNRAR_LOCK
+            .lock()
+            .map_err(|_| ArchiveError::InvalidArchive)?;
         let source = source.to_str().ok_or(ArchiveError::InvalidArchive)?;
 
         let destination = destination.to_str().ok_or(ArchiveError::InvalidArchive)?;
@@ -155,6 +165,9 @@ impl RarBackend {
         path: &Path,
         password: &str,
     ) -> Result<Vec<ArchiveEntry>, ArchiveError> {
+        let _guard = UNRAR_LOCK
+            .lock()
+            .map_err(|_| ArchiveError::InvalidArchive)?;
         let path = path.to_str().ok_or(ArchiveError::InvalidArchive)?;
 
         let path = std::ffi::CString::new(path).map_err(|_| ArchiveError::InvalidArchive)?;

@@ -5,6 +5,7 @@
 #include <cstring>
 #include <string>
 #include <filesystem>
+#include <cstdio>
 
 static std::string wide_to_utf8(const wchar_t *value)
 {
@@ -535,6 +536,12 @@ extern "C" int32_t arkive_rar_extract_with_password(
     HANDLE archive =
         RAROpenArchiveEx(&open_data);
 
+    fprintf(
+        stderr,
+        "[Arkive C++] OPEN: handle=%p OpenResult=%u\n",
+        archive,
+        open_data.OpenResult);
+
     if (archive == nullptr)
     {
         return static_cast<int32_t>(
@@ -555,6 +562,11 @@ extern "C" int32_t arkive_rar_extract_with_password(
             RARReadHeaderEx(
                 archive,
                 &header);
+
+        fprintf(
+            stderr,
+            "[Arkive C++] READ HEADER: %d\n",
+            code);
 
         if (code == ERAR_END_ARCHIVE)
         {
@@ -599,6 +611,10 @@ extern "C" int32_t arkive_rar_extract_with_password(
             RAR_EXTRACT,
             const_cast<char *>(destination),
             nullptr);
+        fprintf(
+            stderr,
+            "[Arkive C++] PROCESS FILE: %d\n",
+            code);
 
         if (code != ERAR_SUCCESS)
         {
@@ -608,6 +624,9 @@ extern "C" int32_t arkive_rar_extract_with_password(
     }
 
     RARCloseArchive(archive);
-
+    fprintf(
+        stderr,
+        "[Arkive C++] PROCESS FILE: %d\n",
+        result);
     return result;
 }
