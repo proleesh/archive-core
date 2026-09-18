@@ -283,6 +283,7 @@ pub unsafe extern "C" fn archive_list_with_password_v2(
 pub extern "C" fn archive_create_zip(
     sources_json: *const c_char,
     destination: *const c_char,
+    performance: i32,
 ) -> i32 {
     if sources_json.is_null() || destination.is_null() {
         return 1;
@@ -309,7 +310,13 @@ pub extern "C" fn archive_create_zip(
 
     let sources: Vec<PathBuf> = sources.into_iter().map(PathBuf::from).collect();
 
-    match crate::backend::zip::create_zip(&sources, Path::new(destination)) {
+    let performance = crate::backend::zip::CompressionPerformance::from_i32(performance);
+
+    match crate::backend::zip::create_zip_with_performance(
+        &sources,
+        Path::new(destination),
+        performance,
+    ) {
         Ok(()) => 0,
         Err(error) => archive_error_code(error),
     }

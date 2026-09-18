@@ -35,7 +35,8 @@ extern "C"
 
     int32_t archive_create_zip(
         const char *sources_json,
-        const char *destination);
+        const char *destination,
+        int32_t performance);
 
     char *archive_list(const char *path);
 
