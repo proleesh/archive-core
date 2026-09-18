@@ -1,10 +1,11 @@
 use std::{
-    ffi::CString,
+    ffi::{CStr, CString},
     os::raw::c_char,
     path::{Path, PathBuf},
 };
 
 use crate::error::ArchiveError;
+use crate::model::ArchiveEntry;
 
 unsafe extern "C" {
     fn arkive_7zip_create_7z(
@@ -14,6 +15,17 @@ unsafe extern "C" {
         compression_level: i32,
         thread_count: u32,
     ) -> i32;
+    fn arkive_7zip_extract(
+        archive_path: *const std::ffi::c_char,
+        destination: *const std::ffi::c_char,
+    ) -> i32;
+
+    fn arkive_7zip_list(
+        archive_path: *const std::ffi::c_char,
+        json_out: *mut *mut std::ffi::c_char,
+    ) -> i32;
+
+    fn arkive_7zip_string_free(value: *mut std::ffi::c_char);
 }
 
 pub fn create_7z(
@@ -74,6 +86,70 @@ pub fn create_7z(
             eprintln!("arkive_7zip_create_7z returned unknown code: {code}");
             Err(ArchiveError::InvalidArchive)
         }
+    }
+}
+pub fn list_7z(path: &Path) -> Result<Vec<ArchiveEntry>, ArchiveError> {
+    let path = CString::new(path.to_string_lossy().as_bytes())
+        .map_err(|_| ArchiveError::InvalidArchive)?;
+
+    let mut json_ptr: *mut std::ffi::c_char = std::ptr::null_mut();
+
+    let result = unsafe { arkive_7zip_list(path.as_ptr(), &mut json_ptr) };
+
+    if result != 0 {
+        return Err(match result {
+            3 => ArchiveError::InvalidArchive,
+            5 => ArchiveError::Io(std::io::Error::other("Failed to open 7Z archive")),
+            _ => ArchiveError::InvalidArchive,
+        });
+    }
+
+    if json_ptr.is_null() {
+        return Err(ArchiveError::InvalidArchive);
+    }
+
+    let json = unsafe { CStr::from_ptr(json_ptr).to_string_lossy().into_owned() };
+
+    unsafe {
+        arkive_7zip_string_free(json_ptr);
+    }
+
+    serde_json::from_str::<Vec<ArchiveEntry>>(&json).map_err(|_| ArchiveError::InvalidArchive)
+}
+pub fn extract_7z(source: &Path, destination: &Path) -> Result<(), ArchiveError> {
+    let source = CString::new(source.to_string_lossy().as_bytes())
+        .map_err(|_| ArchiveError::InvalidArchive)?;
+
+    let destination = CString::new(destination.to_string_lossy().as_bytes())
+        .map_err(|_| ArchiveError::InvalidArchive)?;
+
+    let result = unsafe { arkive_7zip_extract(source.as_ptr(), destination.as_ptr()) };
+
+    match result {
+        0 => Ok(()),
+
+        3 => Err(ArchiveError::InvalidArchive),
+
+        5 => Err(ArchiveError::Io(std::io::Error::other(
+            "Failed to extract 7Z archive",
+        ))),
+
+        1001 => Err(ArchiveError::UnsafePath),
+
+        1002 => Err(ArchiveError::UnsafeRedirection),
+
+        _ => Err(ArchiveError::InvalidArchive),
+    }
+}
+pub struct SevenZipBackend;
+
+impl crate::backend::ArchiveBackend for SevenZipBackend {
+    fn list(&self, path: &Path) -> Result<Vec<ArchiveEntry>, ArchiveError> {
+        list_7z(path)
+    }
+
+    fn extract(&self, source: &Path, destination: &Path) -> Result<(), ArchiveError> {
+        extract_7z(source, destination)
     }
 }
 #[cfg(test)]
@@ -242,5 +318,139 @@ mod tests {
 
         println!();
         println!("Archives: {}", root.display());
+    }
+    #[test]
+    fn list_created_7z_archive() {
+        let temp = std::env::temp_dir().join("arkive_7z_list_test");
+
+        let _ = std::fs::remove_dir_all(&temp);
+
+        std::fs::create_dir_all(&temp).unwrap();
+
+        let source = temp.join("hello.txt");
+
+        std::fs::write(&source, b"Hello from Arkive 7Z").unwrap();
+
+        let archive = temp.join("test.7z");
+
+        create_7z(&[source], &archive, 6, 2).unwrap();
+
+        let entries = list_7z(&archive).unwrap();
+
+        println!("{:#?}", entries);
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "hello.txt");
+
+        assert!(!entries[0].is_directory);
+        assert_eq!(entries[0].size, 20);
+
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+    #[test]
+    fn extract_created_7z_archive() {
+        let temp = std::env::temp_dir().join("arkive_7z_extract_test");
+
+        let _ = std::fs::remove_dir_all(&temp);
+
+        let source_dir = temp.join("source");
+
+        let nested_dir = source_dir.join("nested");
+
+        let output_dir = temp.join("output");
+
+        std::fs::create_dir_all(&nested_dir).unwrap();
+
+        std::fs::write(source_dir.join("hello.txt"), b"Hello from Arkive").unwrap();
+
+        std::fs::write(nested_dir.join("nested.txt"), b"Arkive 7Z extraction works").unwrap();
+
+        let archive = temp.join("test.7z");
+
+        create_7z(&[source_dir.clone()], &archive, 6, 2).unwrap();
+
+        extract_7z(&archive, &output_dir).unwrap();
+
+        let extracted_root = output_dir.join("source");
+
+        assert_eq!(
+            std::fs::read(extracted_root.join("hello.txt")).unwrap(),
+            b"Hello from Arkive"
+        );
+
+        assert_eq!(
+            std::fs::read(extracted_root.join("nested").join("nested.txt")).unwrap(),
+            b"Arkive 7Z extraction works"
+        );
+
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+    #[test]
+    fn reject_7z_symbolic_link() {
+        use std::path::Path;
+
+        let archive = Path::new("/tmp/arkive-link-test/symlink.7z");
+
+        let destination = Path::new("/tmp/arkive-link-test/extracted");
+
+        let _ = std::fs::remove_dir_all(destination);
+
+        let result = extract_7z(archive, destination);
+
+        println!("Symlink extraction result: {:?}", result);
+
+        assert!(
+            matches!(result, Err(ArchiveError::UnsafeRedirection)),
+            "expected UnsafeRedirection, got {:?}",
+            result
+        );
+    }
+    #[test]
+    fn reject_7z_destination_symlink_ancestor() {
+        use std::path::Path;
+
+        let archive = Path::new("/tmp/arkive-destination-link-test/archive.7z");
+
+        let destination = Path::new("/tmp/arkive-destination-link-test/output");
+
+        let outside = Path::new("/tmp/arkive-destination-link-test/outside");
+
+        let _ = std::fs::remove_dir_all("/tmp/arkive-destination-link-test");
+
+        std::fs::create_dir_all("/tmp/arkive-destination-link-test/source/folder").unwrap();
+
+        std::fs::write(
+            "/tmp/arkive-destination-link-test/source/folder/evil.txt",
+            b"must not escape",
+        )
+        .unwrap();
+
+        create_7z(
+            &[Path::new("/tmp/arkive-destination-link-test/source/folder").to_path_buf()],
+            archive,
+            6,
+            1,
+        )
+        .unwrap();
+
+        std::fs::create_dir_all(destination).unwrap();
+        std::fs::create_dir_all(outside).unwrap();
+
+        std::os::unix::fs::symlink(outside, destination.join("folder")).unwrap();
+
+        let result = extract_7z(archive, destination);
+
+        println!("Destination symlink result: {:?}", result);
+
+        assert!(
+            matches!(result, Err(ArchiveError::UnsafeRedirection)),
+            "expected UnsafeRedirection, got {:?}",
+            result
+        );
+
+        assert!(
+            !outside.join("evil.txt").exists(),
+            "archive escaped extraction root"
+        );
     }
 }

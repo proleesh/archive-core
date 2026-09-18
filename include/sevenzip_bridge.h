@@ -27,6 +27,17 @@ extern "C"
         int32_t compression_level,
         uint32_t thread_count);
 
+    int32_t arkive_7zip_list(
+        const char *archive_path,
+        char **json_out);
+
+    int32_t arkive_7zip_extract(
+        const char *archive_path,
+        const char *destination);
+
+    void arkive_7zip_string_free(
+        char *value);
+
 #ifdef __cplusplus
 }
 #endif
