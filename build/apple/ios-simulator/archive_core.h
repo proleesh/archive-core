@@ -38,6 +38,12 @@ extern "C"
         const char *destination,
         int32_t performance);
 
+    int32_t archive_create_7z(
+        const char *sources_json,
+        const char *destination,
+        int32_t compression_level,
+        uint32_t thread_count);
+
     char *archive_list(const char *path);
 
     char *archive_list_with_password(

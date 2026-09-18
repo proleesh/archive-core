@@ -321,3 +321,49 @@ pub extern "C" fn archive_create_zip(
         Err(error) => archive_error_code(error),
     }
 }
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn archive_create_7z(
+    sources_json: *const c_char,
+    destination: *const c_char,
+    compression_level: i32,
+    thread_count: u32,
+) -> i32 {
+    if sources_json.is_null() || destination.is_null() {
+        return 1;
+    }
+
+    let sources_json = match unsafe { CStr::from_ptr(sources_json).to_str() } {
+        Ok(value) => value,
+        Err(_) => return 2,
+    };
+
+    let destination = match unsafe { CStr::from_ptr(destination).to_str() } {
+        Ok(value) => value,
+        Err(_) => return 2,
+    };
+
+    let sources: Vec<String> = match serde_json::from_str(sources_json) {
+        Ok(value) => value,
+        Err(_) => return 3,
+    };
+
+    if sources.is_empty() {
+        return 3;
+    }
+
+    let sources: Vec<PathBuf> = sources.into_iter().map(PathBuf::from).collect();
+
+    let destination = PathBuf::from(destination);
+
+    match crate::backend::sevenzip::create_7z(
+        &sources,
+        &destination,
+        compression_level,
+        thread_count.max(1) as usize,
+    ) {
+        Ok(()) => 0,
+        Err(ArchiveError::Io(_)) => 5,
+        Err(ArchiveError::InvalidArchive) => 3,
+        Err(_) => 100,
+    }
+}

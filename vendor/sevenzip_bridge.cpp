@@ -3,8 +3,11 @@
 #include "../vendor/7zip/CPP/7zip/ICoder.h"
 #include "../vendor/7zip/CPP/7zip/IPassword.h"
 #include "../vendor/7zip/CPP/7zip/Compress/DeflateRegister.cpp"
+#include "../vendor/7zip/CPP/7zip/Compress/LzmaRegister.cpp"
+#include "../vendor/7zip/CPP/7zip/Compress/Lzma2Register.cpp"
 
 #include "../vendor/7zip/CPP/Windows/PropVariant.h"
+#include "../vendor/7zip/CPP/7zip/Archive/7z/7zHandler.h"
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -427,6 +430,146 @@ extern "C" int32_t arkive_7zip_create_zip(
     {
         return 5;
     }
+
+    return 0;
+}
+extern "C" int32_t arkive_7zip_create_7z(
+    const char *const *sources,
+    uint32_t source_count,
+    const char *destination,
+    int32_t compression_level,
+    uint32_t thread_count)
+{
+    if (
+        sources == nullptr ||
+        source_count == 0 ||
+        destination == nullptr ||
+        destination[0] == '\0')
+    {
+        return 1;
+    }
+
+    if (compression_level < 0)
+        compression_level = 0;
+
+    if (compression_level > 9)
+        compression_level = 9;
+
+    if (thread_count == 0)
+        thread_count = 1;
+
+    std::vector<ArkiveZipItem> items;
+
+    if (!collectSources(
+            sources,
+            source_count,
+            items))
+    {
+        return 1;
+    }
+
+    // 7Z handler
+    NArchive::N7z::CHandler *handlerSpec =
+        new NArchive::N7z::CHandler();
+
+    CMyComPtr<IOutArchive> archive =
+        handlerSpec;
+
+    CMyComPtr<ISetProperties> setProperties;
+
+    HRESULT result = archive->QueryInterface(
+        IID_ISetProperties,
+        reinterpret_cast<void **>(&setProperties));
+
+    if (result != S_OK || !setProperties)
+        return 100;
+
+    //
+    // 7Z compression properties
+    //
+    const wchar_t *propertyNames[] = {
+        L"x",
+        L"mt"};
+
+    NCOM::CPropVariant propertyValues[2];
+
+    // Compression level
+    propertyValues[0] =
+        static_cast<UInt32>(compression_level);
+
+    // Requested worker count
+    propertyValues[1] =
+        static_cast<UInt32>(thread_count);
+
+    result = setProperties->SetProperties(
+        propertyNames,
+        propertyValues,
+        2);
+
+    if (result != S_OK)
+    {
+        std::fprintf(
+            stderr,
+            "[Arkive] 7Z SetProperties failed: HRESULT=0x%08X\n",
+            static_cast<unsigned int>(result));
+        return 100;
+    }
+
+    //
+    // Output .7z
+    //
+    COutFileStream *outStreamSpec =
+        new COutFileStream;
+
+    CMyComPtr<IOutStream> outStream(
+        outStreamSpec);
+
+    const std::filesystem::path destinationPath =
+        std::filesystem::u8path(destination);
+
+    const std::string destinationNative =
+        destinationPath.string();
+
+    if (!outStreamSpec->Create_ALWAYS(
+            destinationNative.c_str()))
+    {
+        std::fprintf(
+            stderr,
+            "[Arkive] Failed to create 7Z destination: %s\n",
+            destinationNative.c_str());
+
+        return 5;
+    }
+
+    //
+    // Reuse Arkive's existing update callback
+    //
+    ArkiveArchiveUpdateCallback *callbackSpec =
+        new ArkiveArchiveUpdateCallback(&items);
+
+    CMyComPtr<IArchiveUpdateCallback> callback =
+        callbackSpec;
+
+    result = archive->UpdateItems(
+        outStream,
+        static_cast<UInt32>(items.size()),
+        callback);
+
+    if (result != S_OK)
+    {
+        std::fprintf(
+            stderr,
+            "[Arkive] 7Z UpdateItems failed: HRESULT=0x%08X\n",
+            static_cast<unsigned int>(result));
+        outStreamSpec->Close();
+        return 100;
+    }
+
+    const HRESULT closeResult =
+        outStreamSpec->Close();
+
+    if (closeResult != S_OK)
+        return 5;
 
     return 0;
 }

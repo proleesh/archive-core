@@ -20,6 +20,13 @@ extern "C"
         int32_t compression_level,
         uint32_t thread_count);
 
+    int32_t arkive_7zip_create_7z(
+        const char *const *sources,
+        uint32_t source_count,
+        const char *destination,
+        int32_t compression_level,
+        uint32_t thread_count);
+
 #ifdef __cplusplus
 }
 #endif

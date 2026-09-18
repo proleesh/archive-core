@@ -119,6 +119,25 @@ fn build_sevenzip() {
         build.file(format!("{root}/CPP/7zip/Archive/Zip/{file}"));
     }
 
+    // 7Z archive implementation
+    for file in [
+        "7zCompressionMode.cpp",
+        "7zDecode.cpp",
+        "7zEncode.cpp",
+        "7zExtract.cpp",
+        "7zFolderInStream.cpp",
+        "7zHandler.cpp",
+        "7zHandlerOut.cpp",
+        "7zHeader.cpp",
+        "7zIn.cpp",
+        "7zOut.cpp",
+        "7zProperties.cpp",
+        "7zSpecStream.cpp",
+        "7zUpdate.cpp",
+    ] {
+        build.file(format!("{root}/CPP/7zip/Archive/7z/{file}"));
+    }
+
     // ZIP codecs referenced by the official ZIP handler.
     for file in [
         "CopyCoder.cpp",
@@ -128,6 +147,7 @@ fn build_sevenzip() {
         "LzfseDecoder.cpp",
         "LzmaDecoder.cpp",
         "LzmaEncoder.cpp",
+        "Lzma2Decoder.cpp",
         "LzOutWindow.cpp",
         "Lzma2Encoder.cpp",
         "PpmdZip.cpp",
@@ -160,6 +180,7 @@ fn build_sevenzip() {
         "StringConvert.cpp",
         "StringToInt.cpp",
         "UTFConvert.cpp",
+        "Wildcard.cpp",
     ] {
         build.file(format!("{root}/CPP/Common/{file}"));
     }
